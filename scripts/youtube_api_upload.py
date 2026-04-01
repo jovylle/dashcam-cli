@@ -4,6 +4,7 @@ import os
 import sys
 
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -19,16 +20,26 @@ SCOPES = [
 def get_credentials(client_secrets: str, token_file: str) -> Credentials:
     creds = None
     if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-        if not creds.has_scopes(SCOPES):
+        try:
+            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+            if not creds.has_scopes(SCOPES):
+                creds = None
+        except Exception:
             creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except RefreshError as exc:
+                # invalid_grant means refresh token was revoked/expired; re-auth interactively.
+                if "invalid_grant" not in str(exc):
+                    raise
+                creds = None
+        if not creds:
             flow = InstalledAppFlow.from_client_secrets_file(client_secrets, SCOPES)
             creds = flow.run_local_server(port=0)
+        os.makedirs(os.path.dirname(token_file), exist_ok=True)
         with open(token_file, "w", encoding="utf-8") as f:
             f.write(creds.to_json())
 

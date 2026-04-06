@@ -14,6 +14,8 @@ from googleapiclient.http import MediaFileUpload
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # Required for playlistItems.insert (add uploaded video to a playlist).
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 
@@ -46,6 +48,18 @@ def get_credentials(client_secrets: str, token_file: str) -> Credentials:
     return creds
 
 
+def add_video_to_playlist(youtube, playlist_id: str, video_id: str) -> None:
+    youtube.playlistItems().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+        },
+    ).execute()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Upload one video to YouTube.")
     parser.add_argument("--file", default="")
@@ -56,6 +70,11 @@ def main() -> int:
     parser.add_argument("--client-secrets", required=True)
     parser.add_argument("--token-file", required=True)
     parser.add_argument("--target-channel-id", default="")
+    parser.add_argument(
+        "--playlist-id",
+        default="",
+        help="If set, add the new video to this playlist (ID from studio URL, e.g. PL…).",
+    )
     parser.add_argument("--check-channel-only", action="store_true")
     args = parser.parse_args()
 
@@ -109,7 +128,23 @@ def main() -> int:
         media = MediaFileUpload(args.file, resumable=True)
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"Uploaded video id: {response.get('id', '')}")
+        video_id = response.get("id", "")
+        print(f"Uploaded video id: {video_id}")
+
+        playlist_id = (args.playlist_id or "").strip()
+        if playlist_id and video_id:
+            try:
+                add_video_to_playlist(youtube, playlist_id, video_id)
+                print(f"Added to playlist: {playlist_id}")
+            except HttpError as exc:
+                print(
+                    f"Upload succeeded but playlist add failed (video is live): {exc}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Fix YT_PLAYLIST_ID / permissions or add the video manually in YouTube Studio.",
+                    file=sys.stderr,
+                )
         return 0
     except HttpError as exc:
         print(f"YouTube API error: {exc}", file=sys.stderr)

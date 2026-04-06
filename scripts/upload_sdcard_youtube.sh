@@ -25,6 +25,12 @@ YT_PRIVACY="${YT_PRIVACY:-unlisted}"
 GOOGLE_CLIENT_SECRETS="${GOOGLE_CLIENT_SECRETS:-$HOME/.config/youtube/client_secrets.json}"
 GOOGLE_TOKEN_FILE="${GOOGLE_TOKEN_FILE:-$HOME/.config/youtube/token.json}"
 YT_TARGET_CHANNEL_ID="${YT_TARGET_CHANNEL_ID:-}"
+YT_PLAYLIST_ID="${YT_PLAYLIST_ID:-}"
+
+PLAYLIST_ARGS=()
+if [[ -n "$YT_PLAYLIST_ID" ]]; then
+  PLAYLIST_ARGS=(--playlist-id "$YT_PLAYLIST_ID")
+fi
 
 format_title_from_stem() {
   local stem="$1"
@@ -78,7 +84,8 @@ if ! python3 "$SCRIPT_DIR/youtube_api_upload.py" \
   --privacy "$YT_PRIVACY" \
   --client-secrets "$GOOGLE_CLIENT_SECRETS" \
   --token-file "$GOOGLE_TOKEN_FILE" \
-  --target-channel-id "$YT_TARGET_CHANNEL_ID"; then
+  --target-channel-id "$YT_TARGET_CHANNEL_ID" \
+  "${PLAYLIST_ARGS[@]}"; then
   echo "Auth/channel pre-check failed. No files were renamed." >&2
   echo "If scopes changed, delete token and retry: rm -f \"$GOOGLE_TOKEN_FILE\"" >&2
   exit 1
@@ -140,7 +147,8 @@ while IFS= read -r file; do
     --privacy "$YT_PRIVACY" \
     --client-secrets "$GOOGLE_CLIENT_SECRETS" \
     --token-file "$GOOGLE_TOKEN_FILE" \
-    --target-channel-id "$YT_TARGET_CHANNEL_ID"; then
+    --target-channel-id "$YT_TARGET_CHANNEL_ID" \
+    "${PLAYLIST_ARGS[@]}"; then
     done_stem="${working_stem%_$READY_TAG}_$DONE_TAG"
     done_base="${done_stem}.${ext}"
     done_path="${dir}/${done_base}"

@@ -27,11 +27,6 @@ GOOGLE_TOKEN_FILE="${GOOGLE_TOKEN_FILE:-$HOME/.config/youtube/token.json}"
 YT_TARGET_CHANNEL_ID="${YT_TARGET_CHANNEL_ID:-}"
 YT_PLAYLIST_ID="${YT_PLAYLIST_ID:-}"
 
-PLAYLIST_ARGS=()
-if [[ -n "$YT_PLAYLIST_ID" ]]; then
-  PLAYLIST_ARGS=(--playlist-id "$YT_PLAYLIST_ID")
-fi
-
 format_title_from_stem() {
   local stem="$1"
   local clean="$stem"
@@ -78,14 +73,18 @@ if [[ ! -f "$GOOGLE_CLIENT_SECRETS" ]]; then
 fi
 
 echo "Validating Google auth and target channel..."
-if ! python3 "$SCRIPT_DIR/youtube_api_upload.py" \
-  --check-channel-only \
-  --category-id "$YT_CATEGORY_ID" \
-  --privacy "$YT_PRIVACY" \
-  --client-secrets "$GOOGLE_CLIENT_SECRETS" \
-  --token-file "$GOOGLE_TOKEN_FILE" \
-  --target-channel-id "$YT_TARGET_CHANNEL_ID" \
-  "${PLAYLIST_ARGS[@]}"; then
+check_args=(
+  --check-channel-only
+  --category-id "$YT_CATEGORY_ID"
+  --privacy "$YT_PRIVACY"
+  --client-secrets "$GOOGLE_CLIENT_SECRETS"
+  --token-file "$GOOGLE_TOKEN_FILE"
+  --target-channel-id "$YT_TARGET_CHANNEL_ID"
+)
+if [[ -n "$YT_PLAYLIST_ID" ]]; then
+  check_args+=(--playlist-id "$YT_PLAYLIST_ID")
+fi
+if ! python3 "$SCRIPT_DIR/youtube_api_upload.py" "${check_args[@]}"; then
   echo "Auth/channel pre-check failed. No files were renamed." >&2
   echo "If scopes changed, delete token and retry: rm -f \"$GOOGLE_TOKEN_FILE\"" >&2
   exit 1
@@ -139,16 +138,20 @@ while IFS= read -r file; do
   title="$(format_title_from_stem "$working_stem")"
   echo "Uploading: $working_base"
 
-  if python3 "$SCRIPT_DIR/youtube_api_upload.py" \
-    --file "$working_path" \
-    --title "$title" \
-    --description "$YT_DESCRIPTION" \
-    --category-id "$YT_CATEGORY_ID" \
-    --privacy "$YT_PRIVACY" \
-    --client-secrets "$GOOGLE_CLIENT_SECRETS" \
-    --token-file "$GOOGLE_TOKEN_FILE" \
-    --target-channel-id "$YT_TARGET_CHANNEL_ID" \
-    "${PLAYLIST_ARGS[@]}"; then
+  upload_args=(
+    --file "$working_path"
+    --title "$title"
+    --description "$YT_DESCRIPTION"
+    --category-id "$YT_CATEGORY_ID"
+    --privacy "$YT_PRIVACY"
+    --client-secrets "$GOOGLE_CLIENT_SECRETS"
+    --token-file "$GOOGLE_TOKEN_FILE"
+    --target-channel-id "$YT_TARGET_CHANNEL_ID"
+  )
+  if [[ -n "$YT_PLAYLIST_ID" ]]; then
+    upload_args+=(--playlist-id "$YT_PLAYLIST_ID")
+  fi
+  if python3 "$SCRIPT_DIR/youtube_api_upload.py" "${upload_args[@]}"; then
     done_stem="${working_stem%_$READY_TAG}_$DONE_TAG"
     done_base="${done_stem}.${ext}"
     done_path="${dir}/${done_base}"

@@ -1,4 +1,5 @@
 # dashcam-cli
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/03479dc8-3313-4f49-9221-919ffd57e465" />
 
 Simple scripts to automate a dashcam workflow:
 - import clips from SD card

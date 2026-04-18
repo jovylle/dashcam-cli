@@ -1,9 +1,28 @@
 # dashcam-cli
 
-Simple scripts to automate a dashcam workflow:
+**dashcam-cli** is a lightweight automation kit for dashcam footage that lives on an SD card: it copies clips into a local folder, merges many segment files into one MP4 using FFmpeg stream copy (fast, no re-encode), and can push videos to YouTube via the Data API v3 with Google OAuth. Uploads use clear filename staging (`*_READY` / `*_DONE`), optional playlist placement, and an optional channel ID check so you do not post to the wrong channel by mistake.
+
+What it does in short:
+
 - import clips from SD card
 - combine segment clips into one output file
 - upload clips to YouTube with safe channel checks and file tagging
+
+## Tech stack
+
+```json
+[
+  "bash",
+  "python3",
+  "ffmpeg",
+  "rsync",
+  "youtube-data-api-v3",
+  "google-auth",
+  "google-auth-oauthlib",
+  "google-api-python-client",
+  "oauth-2.0"
+]
+```
 
 ## Requirements
 

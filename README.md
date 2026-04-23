@@ -1,100 +1,83 @@
-# dashcam-cli
+# easy-youtube-batch-uploader
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/03479dc8-3313-4f49-9221-919ffd57e465" />
 
-**dashcam-cli** automates a typical dashcam workflow: copy clips from the card, merge segments into one MP4 with FFmpeg stream copy, and optionally upload to YouTube with OAuth, READY/DONE filename staging, and an optional channel check.
+Simple CLI for batch-uploading many `.mp4`/`.mov` files to YouTube with OAuth.
 
-What it does in short:
+- installs from npm
+- guided terminal setup (`setup`)
+- safe upload staging with `_READY` / `_DONE` file tags
+- optional channel lock and playlist auto-add
 
-- import clips from SD card
-- combine segment clips into one output file
-- upload clips to YouTube with safe channel checks and file tagging
-
-## Tech stack
-
-```json
-[
-  "bash",
-  "python3",
-  "ffmpeg",
-  "rsync",
-  "youtube-data-api-v3",
-  "google-auth",
-  "google-auth-oauthlib",
-  "google-api-python-client",
-  "oauth-2.0"
-]
-```
-
-## Requirements
-
-- macOS or Linux
-- `bash`, `rsync`, `ffmpeg`, `python3`
-- Google Cloud OAuth desktop client JSON (for YouTube upload)
-
-## Setup
-
-1. Create your local config:
+## Install
 
 ```bash
-cp .env.example .env
+npm install -g easy-youtube-batch-uploader
 ```
 
-2. Update `.env` paths and YouTube values.
-3. Make scripts executable (if needed):
+Commands:
+- full command: `easy-youtube-batch-uploader`
+- short alias: `eybu`
+
+## 3-Minute Quick Start
 
 ```bash
-chmod +x scripts/*.sh
+eybu setup
+eybu doctor
+eybu upload
 ```
 
-## Environment Variables
+What to do:
+1. `setup`: answer prompts (video folder + YouTube config)
+2. `doctor`: verify local setup
+3. `upload`: first run opens browser OAuth login, then uploads in batch
 
-Copy from `.env.example` and adjust:
+## Platform Support
 
-- `SOURCE`: folder to read videos from (usually SD card mount path)
-- `DEST`: local import directory for raw clips
-- `COMBINED_DIR`: output directory for merged videos
-- `DELETE_SEGMENTS_AFTER_COMBINE`: set `1` only if you want source segments removed after successful combine
-- `YT_TITLE_PREFIX`: prefix for generated video titles
-- `YT_DESCRIPTION`: default YouTube description
-- `YT_CATEGORY_ID`: YouTube category (default `2`)
-- `YT_PRIVACY`: `private`, `unlisted`, or `public`
-- `READY_TAG` / `DONE_TAG`: filename tags used by upload flow
-- `GOOGLE_CLIENT_SECRETS`: path to OAuth client JSON
-- `GOOGLE_TOKEN_FILE`: token cache path
-- `YT_TARGET_CHANNEL_ID` (optional but recommended): safety lock to enforce target channel
-- `YT_PLAYLIST_ID` (optional): auto-add uploads to a playlist
+- macOS / Linux: supported
+- Windows: use WSL2 (recommended) or Git Bash
+- Native Windows `cmd` / PowerShell: not officially supported in this release
 
-## Usage
+## OAuth Notes
 
-### 1) Import from SD card
+- No API key is required for upload flow.
+- First upload opens browser login and consent screen.
+- Token is cached locally and reused on next uploads.
+- If token is revoked/expired, CLI asks to re-authenticate.
+
+## Commands
 
 ```bash
-./scripts/dashcam_import.sh
+eybu init
+eybu setup
+eybu doctor
+eybu upload
 ```
 
-Copies from `SOURCE` to `DEST` without deleting from source.
+- `init`: non-interactive config initialize/update
+- `setup`: interactive setup wizard
+- `doctor`: environment and config checks
+- `upload`: batch upload all supported videos from `SOURCE`
 
-### 2) Combine imported segments
+## Config File
 
-```bash
-./scripts/combine_dashcam.sh
-```
+- Default path: `~/.config/easy-youtube-batch-uploader/config.env`
+- Override path: `EYBU_ENV_FILE=/your/path/config.env`
 
-Merges clips in `DEST` using stream copy into `COMBINED_DIR`.
-Segments are only deleted when combine succeeds and `DELETE_SEGMENTS_AFTER_COMBINE=1`.
+`setup` already asks for the upload settings you need. You can re-run `eybu setup` anytime to update values.
 
-### 3) Upload clips to YouTube
+## Safety Behavior
 
-```bash
-./scripts/upload_sdcard_youtube.sh
-```
-
-What this upload script does:
-- validates auth and (optionally) channel before renaming files
+- validates auth and (optionally) target channel before renaming files
 - renames file to `*_READY` before upload
-- uploads with generated title and configured metadata
 - renames to `*_DONE` only after successful upload
-- leaves failed uploads as `*_READY` for retry
+- leaves failed uploads as `*_READY` for easy retry
+
+## Troubleshooting
+
+- `EOTP` on publish: run npm publish with OTP (`--otp=<code>`)
+- OAuth issues: delete token file and run upload again
+- Wrong account/channel: set `YT_TARGET_CHANNEL_ID` as safety lock
+- `SOURCE` not found: update path in config or mount drive first
 
 ## Sample Screenshots
 

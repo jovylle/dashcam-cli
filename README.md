@@ -63,17 +63,7 @@ eybu upload
 - Default path: `~/.config/easy-youtube-batch-uploader/config.env`
 - Override path: `EYBU_ENV_FILE=/your/path/config.env`
 
-Main values:
-- `SOURCE`: folder containing videos to upload
-- `YT_TITLE_PREFIX`: title prefix
-- `YT_DESCRIPTION`: default description
-- `YT_CATEGORY_ID`: YouTube category id (default `2`)
-- `YT_PRIVACY`: `private`, `unlisted`, or `public`
-- `READY_TAG` / `DONE_TAG`: upload state tags in filename
-- `GOOGLE_CLIENT_SECRETS`: OAuth client JSON path
-- `GOOGLE_TOKEN_FILE`: OAuth token cache path
-- `YT_TARGET_CHANNEL_ID` (optional): enforce specific channel id
-- `YT_PLAYLIST_ID` (optional): auto-add uploaded videos to playlist
+`setup` already asks for the upload settings you need. You can re-run `eybu setup` anytime to update values.
 
 ## Safety Behavior
 

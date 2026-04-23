@@ -1,6 +1,6 @@
 {
   "name": "easy-youtube-batch-uploader",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Batch YouTube uploader CLI with OAuth setup wizard.",
   "bin": {
     "easy-youtube-batch-uploader": "bin/dashcam-cli.js",

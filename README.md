@@ -10,26 +10,39 @@ Simple CLI for batch-uploading many `.mp4`/`.mov` files to YouTube with OAuth.
 
 ## Install
 
+### Option 1: Global install (best for frequent use)
+
 ```bash
 npm install -g easy-youtube-batch-uploader
+easy-youtube-batch-uploader start
+easy-youtube-batch-uploader upload
+```
+
+### Option 2: No global install (via npx)
+
+```bash
+npx easy-youtube-batch-uploader
 ```
 
 Commands:
 - full command: `easy-youtube-batch-uploader`
-- short alias: `eybu`
+- short alias (global install): `eybu`
 
 ## 3-Minute Quick Start
 
 ```bash
+eybu start
 eybu setup
+eybu setup-advanced
 eybu doctor
 eybu upload
 ```
 
 What to do:
-1. `setup`: answer prompts (video folder + YouTube config)
-2. `doctor`: verify local setup
-3. `upload`: first run opens browser OAuth login, then uploads in batch
+1. `start`: quick start flow (auto-bootstrap, asks missing core setup values, runs doctor, optional upload)
+2. `setup`: core setup wizard (manual edit/update)
+3. `setup-advanced`: advanced values (video defaults/tags + OAuth/channel/playlist)
+4. `upload`: first run opens browser OAuth login, then uploads in batch
 
 ## Platform Support
 
@@ -47,14 +60,16 @@ What to do:
 ## Commands
 
 ```bash
-eybu init
+eybu start
 eybu setup
+eybu setup-advanced
 eybu doctor
 eybu upload
 ```
 
-- `init`: non-interactive config initialize/update
-- `setup`: interactive setup wizard
+- `start`: one-command quick start (default when no command is passed)
+- `setup`: interactive quick setup wizard (core values)
+- `setup-advanced`: interactive wizard for advanced values (video defaults/tags, OAuth paths, channel lock, playlist)
 - `doctor`: environment and config checks
 - `upload`: batch upload all supported videos from `SOURCE`
 
@@ -63,7 +78,7 @@ eybu upload
 - Default path: `~/.config/easy-youtube-batch-uploader/config.env`
 - Override path: `EYBU_ENV_FILE=/your/path/config.env`
 
-`setup` already asks for the upload settings you need. You can re-run `eybu setup` anytime to update values.
+Use `setup` for core values and `setup-advanced` for advanced values. You can re-run either command anytime to update values.
 
 ## Safety Behavior
 

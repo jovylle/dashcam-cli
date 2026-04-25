@@ -18,16 +18,18 @@ function printHelp() {
   console.log(`easy-youtube-batch-uploader
 
 Usage:
-  easy-youtube-batch-uploader init
+  easy-youtube-batch-uploader start
   easy-youtube-batch-uploader setup
+  easy-youtube-batch-uploader setup-advanced
   easy-youtube-batch-uploader doctor
   easy-youtube-batch-uploader upload
   easy-youtube-batch-uploader help
   eybu <command>
 
 Commands:
-  init    Create/update config and make shell scripts executable
-  setup   Interactive setup wizard (prompts for config values)
+  start   Quick start (bootstrap config, ask missing core values, doctor, optional upload)
+  setup   Interactive quick setup wizard (core values)
+  setup-advanced  Interactive wizard for advanced values
   doctor  Validate local setup and config paths
   upload  Run scripts/upload_sdcard_youtube.sh
 `);
@@ -117,7 +119,7 @@ function checkPathExists(label, value, expectedType, required, collector) {
   }
 }
 
-function init() {
+function ensureInitialized({ printSummary = true } = {}) {
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
   const templateValues = parseEnvFile(envExamplePath);
   let currentValues = {};
@@ -150,18 +152,25 @@ function init() {
     if (!file.endsWith(".sh")) continue;
     fs.chmodSync(path.join(scriptsDir, file), 0o755);
   }
-  console.log("Ensured scripts/*.sh are executable");
-  console.log("");
-  console.log("Next steps:");
-  if (created) {
-    console.log(`1) Edit config: ${envPath}`);
-    console.log("2) Run: easy-youtube-batch-uploader doctor");
-    console.log("3) Run: easy-youtube-batch-uploader upload");
-  } else {
-    console.log(`1) Optional: review config at ${envPath}`);
-    console.log("2) Run: easy-youtube-batch-uploader doctor");
-    console.log("3) Run: easy-youtube-batch-uploader upload");
+  if (printSummary) {
+    console.log("Ensured scripts/*.sh are executable");
+    console.log("");
+    console.log("Next steps:");
+    if (created) {
+      console.log(`1) Run: easy-youtube-batch-uploader setup`);
+      console.log("2) Run: easy-youtube-batch-uploader doctor");
+      console.log("3) Run: easy-youtube-batch-uploader upload");
+    } else {
+      console.log(`1) Optional: review config at ${envPath}`);
+      console.log("2) Run: easy-youtube-batch-uploader doctor");
+      console.log("3) Run: easy-youtube-batch-uploader upload");
+    }
   }
+  return { created };
+}
+
+function init() {
+  ensureInitialized({ printSummary: true });
 }
 
 function quoteIfNeeded(value) {
@@ -174,11 +183,12 @@ function quoteIfNeeded(value) {
   return str;
 }
 
-async function setupWizard() {
+async function setupWizard(mode = "core", options = {}) {
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
   const templateValues = parseEnvFile(envExamplePath);
   const currentValues = fs.existsSync(envPath) ? parseEnvFile(envPath) : {};
   const merged = { ...templateValues, ...currentValues };
+  const { onlyMissing = false } = options;
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -191,23 +201,42 @@ async function setupWizard() {
     });
 
   try {
-    console.log(`\nSetup wizard for ${appName}`);
+    const isAdvanced = mode === "advanced";
+    console.log(`\n${isAdvanced ? "Advanced setup wizard" : "Setup wizard"} for ${appName}`);
     console.log(`Config file: ${envPath}`);
     console.log("Press Enter to keep the current/default value.\n");
 
-    const fields = [
+    const coreFields = [
       ["SOURCE", "Folder containing videos to upload"],
       ["YT_TITLE_PREFIX", "YouTube title prefix"],
       ["YT_DESCRIPTION", "YouTube default description"],
-      ["YT_CATEGORY_ID", "YouTube category ID"],
       ["YT_PRIVACY", "YouTube privacy (private|unlisted|public)"],
+    ];
+    const optionalFields = [
+      ["YT_TITLE_PREFIX", "YouTube title prefix"],
+      ["YT_DESCRIPTION", "YouTube default description"],
+      ["YT_CATEGORY_ID", "YouTube category ID (default: 2)"],
+      ["YT_PRIVACY", "YouTube privacy (private|unlisted|public)"],
+      ["READY_TAG", "Staging tag appended before upload (default: READY)"],
+      ["DONE_TAG", "Success tag appended after upload (default: DONE)"],
       ["GOOGLE_CLIENT_SECRETS", "Path to Google OAuth client_secrets JSON"],
       ["GOOGLE_TOKEN_FILE", "Path to token cache JSON"],
       ["YT_TARGET_CHANNEL_ID", "Target channel ID (optional safety lock)"],
       ["YT_PLAYLIST_ID", "Playlist ID for auto-add uploads (optional)"],
     ];
+    const fields = isAdvanced ? optionalFields : coreFields;
+    const activeFields = onlyMissing
+      ? fields.filter(([key]) => {
+          const value = (merged[key] ?? "").trim();
+          return value === "";
+        })
+      : fields;
 
-    for (const [key, label] of fields) {
+    if (activeFields.length === 0) {
+      console.log("All required values for this setup mode are already configured.");
+    }
+
+    for (const [key, label] of activeFields) {
       const current = merged[key] ?? "";
       const answer = await ask(`${label} [${current}]: `);
       if (answer !== "") {
@@ -227,7 +256,7 @@ async function setupWizard() {
   }
 }
 
-function doctor() {
+function runDoctor({ exitOnFinish = true } = {}) {
   const missingCommands = ["bash", "python3"].filter(
     (command) => !hasCommand(command)
   );
@@ -276,21 +305,95 @@ function doctor() {
     for (const warning of warnings) console.log(`- ${warning}`);
   }
 
-  process.exit(issues.length === 0 ? 0 : 1);
+  const status = issues.length === 0 ? 0 : 1;
+  if (exitOnFinish) {
+    process.exit(status);
+  }
+  return status;
 }
 
-const command = process.argv[2] || "help";
+function doctor() {
+  runDoctor({ exitOnFinish: true });
+}
+
+async function start() {
+  ensureInitialized({ printSummary: false });
+
+  const envValues = parseEnvFile(envPath);
+  const missingCoreKeys = ["SOURCE", "YT_TITLE_PREFIX", "YT_DESCRIPTION", "YT_PRIVACY"].filter(
+    (key) => !(envValues[key] || "").trim()
+  );
+
+  if (missingCoreKeys.length > 0) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.error("Missing core setup values. Run 'easy-youtube-batch-uploader setup' in an interactive terminal.");
+      process.exit(1);
+    }
+    console.log("Core setup is incomplete. Let's finish missing values.\n");
+    await setupWizard("core", { onlyMissing: true });
+  }
+
+  const doctorStatus = runDoctor({ exitOnFinish: false });
+  if (doctorStatus !== 0) {
+    process.exit(doctorStatus);
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log("Doctor passed. Run: easy-youtube-batch-uploader upload");
+    return;
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const ask = (prompt) =>
+    new Promise((resolve) => {
+      rl.question(prompt, (answer) => resolve(answer.trim().toLowerCase()));
+    });
+  try {
+    const shouldUpload = await ask("\nDoctor passed. Start upload now? [y/N]: ");
+    if (shouldUpload === "y" || shouldUpload === "yes") {
+      run("upload_sdcard_youtube.sh");
+      return;
+    }
+    console.log("Upload skipped. Run: easy-youtube-batch-uploader upload");
+  } finally {
+    rl.close();
+  }
+}
+
+const command = process.argv[2] || "start";
 
 if (command === "help" || command === "--help" || command === "-h") {
   printHelp();
+} else if (command === "start") {
+  start()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(`Start failed: ${err.message}`);
+      process.exit(1);
+    });
 } else if (command === "init") {
+  console.log("`init` is deprecated. Using quick bootstrap flow.");
   init();
 } else if (command === "setup") {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    console.error("setup requires an interactive terminal. Use 'init' for non-interactive mode.");
+    console.error("setup requires an interactive terminal. Use 'start' for non-interactive quick checks.");
     process.exit(1);
   }
-  setupWizard()
+  setupWizard("core")
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(`Setup failed: ${err.message}`);
+      process.exit(1);
+    });
+} else if (command === "setup-advanced" || command === "setup-optional") {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error("setup-advanced requires an interactive terminal. Use 'start' for non-interactive quick checks.");
+    process.exit(1);
+  }
+  setupWizard("advanced")
     .then(() => process.exit(0))
     .catch((err) => {
       console.error(`Setup failed: ${err.message}`);

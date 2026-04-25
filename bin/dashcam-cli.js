@@ -93,6 +93,14 @@ function toEnvContent(values, templatePath) {
   return `${rendered.join("\n").trimEnd()}\n`;
 }
 
+function normalizeEnvValues(values) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(values)) {
+    normalized[key] = quoteIfNeeded(value);
+  }
+  return normalized;
+}
+
 function expandPath(value) {
   if (!value) return value;
   return value
@@ -128,7 +136,11 @@ function ensureInitialized({ printSummary = true } = {}) {
   if (!fs.existsSync(envPath)) {
     created = true;
     currentValues = { ...templateValues };
-    fs.writeFileSync(envPath, toEnvContent(currentValues, envExamplePath), "utf8");
+    fs.writeFileSync(
+      envPath,
+      toEnvContent(normalizeEnvValues(currentValues), envExamplePath),
+      "utf8"
+    );
     console.log(`Created config file: ${envPath}`);
   } else {
     currentValues = parseEnvFile(envPath);
@@ -139,7 +151,11 @@ function ensureInitialized({ printSummary = true } = {}) {
         added += 1;
       }
     }
-    fs.writeFileSync(envPath, toEnvContent(currentValues, envExamplePath), "utf8");
+    fs.writeFileSync(
+      envPath,
+      toEnvContent(normalizeEnvValues(currentValues), envExamplePath),
+      "utf8"
+    );
     if (added > 0) {
       console.log(`Config updated with ${added} missing default value(s): ${envPath}`);
     } else {
@@ -317,7 +333,16 @@ function doctor() {
 }
 
 async function start() {
-  ensureInitialized({ printSummary: false });
+  const { created } = ensureInitialized({ printSummary: false });
+
+  if (created) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.log("First run detected. Run 'easy-youtube-batch-uploader setup' to finish setup, then run upload.");
+      process.exit(0);
+    }
+    console.log("\nFirst run detected. We'll do quick setup, then continue to doctor and upload.");
+    await setupWizard("core");
+  }
 
   const envValues = parseEnvFile(envPath);
   const missingCoreKeys = ["SOURCE", "YT_TITLE_PREFIX", "YT_DESCRIPTION", "YT_PRIVACY"].filter(

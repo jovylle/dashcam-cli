@@ -10,18 +10,21 @@ Simple CLI for batch-uploading many `.mp4`/`.mov` files to YouTube with OAuth.
 
 ## Install
 
-### Option 1: Global install (best for frequent use)
+### Option 1: No global install (recommended)
+
+```bash
+npx easy-youtube-batch-uploader@latest start
+npx easy-youtube-batch-uploader@latest upload
+```
+
+`npx` downloads/caches the package on first use, then runs it.
+
+### Option 2: Global install (best for frequent use)
 
 ```bash
 npm install -g easy-youtube-batch-uploader
 easy-youtube-batch-uploader start
 easy-youtube-batch-uploader upload
-```
-
-### Option 2: No global install (via npx)
-
-```bash
-npx easy-youtube-batch-uploader
 ```
 
 Commands:
@@ -31,11 +34,11 @@ Commands:
 ## 3-Minute Quick Start
 
 ```bash
-eybu start
-eybu setup
-eybu setup-advanced
-eybu doctor
-eybu upload
+npx easy-youtube-batch-uploader@latest start
+npx easy-youtube-batch-uploader@latest setup
+npx easy-youtube-batch-uploader@latest setup-advanced
+npx easy-youtube-batch-uploader@latest doctor
+npx easy-youtube-batch-uploader@latest upload
 ```
 
 What to do:
@@ -60,6 +63,9 @@ What to do:
 ## Commands
 
 ```bash
+npx easy-youtube-batch-uploader@latest help
+
+# If globally installed, short alias is available:
 eybu start
 eybu setup
 eybu setup-advanced

@@ -21,6 +21,8 @@ SCOPES = [
 
 def get_credentials(client_secrets: str, token_file: str) -> Credentials:
     creds = None
+    client_secrets = os.path.expanduser(client_secrets) if client_secrets else client_secrets
+    token_file = os.path.expanduser(token_file) if token_file else token_file
     if os.path.exists(token_file):
         try:
             creds = Credentials.from_authorized_user_file(token_file, SCOPES)
@@ -40,7 +42,19 @@ def get_credentials(client_secrets: str, token_file: str) -> Credentials:
                 creds = None
         if not creds:
             flow = InstalledAppFlow.from_client_secrets_file(client_secrets, SCOPES)
-            creds = flow.run_local_server(port=0)
+            # Try to open a local browser for interactive OAuth. If the environment
+            # cannot open a browser (WSL/git-bash without GUI, remote shell, etc.),
+            # fall back to a console-based flow that prints a URL and asks for the code.
+            try:
+                # Newer google-auth-oauthlib supports open_browser kwarg; prefer it.
+                try:
+                    creds = flow.run_local_server(port=0, open_browser=True)
+                except TypeError:
+                    # Older versions may not accept open_browser kwarg.
+                    creds = flow.run_local_server(port=0)
+            except Exception:
+                print("Could not open a browser for OAuth — falling back to console.", file=sys.stderr)
+                creds = flow.run_console()
         os.makedirs(os.path.dirname(token_file), exist_ok=True)
         with open(token_file, "w", encoding="utf-8") as f:
             f.write(creds.to_json())

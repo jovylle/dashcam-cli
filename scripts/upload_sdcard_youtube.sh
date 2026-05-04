@@ -18,14 +18,39 @@ set +a
 
 : "${SOURCE:?SOURCE is not set in .env}"
 
+# Expand common home indicators in sourced env values so paths like
+# "$HOME/.config/..." or "~/..." work even if the .env kept them
+# verbatim (single-quoted) and the current shell didn't expand them.
+expand_home_var() {
+  local val="$1"
+  # Replace leading ~ with $HOME
+  val="${val/#~/$HOME}"
+  # Replace literal $HOME with the actual home directory
+  val="${val//\$HOME/$HOME}"
+  printf "%s" "$val"
+}
+
+if [[ -n "${GOOGLE_CLIENT_SECRETS:-}" ]]; then
+  GOOGLE_CLIENT_SECRETS="$(expand_home_var "$GOOGLE_CLIENT_SECRETS")"
+else
+  GOOGLE_CLIENT_SECRETS="$(expand_home_var "$HOME/.config/youtube/client_secrets.json")"
+fi
+
+if [[ -n "${GOOGLE_TOKEN_FILE:-}" ]]; then
+  GOOGLE_TOKEN_FILE="$(expand_home_var "$GOOGLE_TOKEN_FILE")"
+else
+  GOOGLE_TOKEN_FILE="$(expand_home_var "$HOME/.config/youtube/token.json")"
+fi
+
+SOURCE="$(expand_home_var "${SOURCE:-}")"
+
 DONE_TAG="${DONE_TAG:-DONE}"
 READY_TAG="${READY_TAG:-READY}"
 YT_TITLE_PREFIX="${YT_TITLE_PREFIX:-Dashcam}"
 YT_DESCRIPTION="${YT_DESCRIPTION:-Uploaded by dashcam-cli}"
 YT_CATEGORY_ID="${YT_CATEGORY_ID:-2}"
 YT_PRIVACY="${YT_PRIVACY:-unlisted}"
-GOOGLE_CLIENT_SECRETS="${GOOGLE_CLIENT_SECRETS:-$HOME/.config/youtube/client_secrets.json}"
-GOOGLE_TOKEN_FILE="${GOOGLE_TOKEN_FILE:-$HOME/.config/youtube/token.json}"
+# (defaults applied above and expanded)
 YT_TARGET_CHANNEL_ID="${YT_TARGET_CHANNEL_ID:-}"
 YT_PLAYLIST_ID="${YT_PLAYLIST_ID:-}"
 

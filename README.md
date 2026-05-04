@@ -52,6 +52,25 @@ What to do:
 - macOS / Linux: supported
 - Windows: use WSL2 (recommended) or Git Bash
 - Native Windows `cmd` / PowerShell: not officially supported in this release
+ 
+Windows notes (npx)
+- Use `npx` to run the beta without installing globally: `npx easy-youtube-batch-uploader@beta start`.
+- The CLI expects a POSIX `bash` shell and `python3` on PATH. On Windows, prefer:
+	- WSL2 (recommended) or
+	- Git Bash (from Git for Windows) with `python3` installed, or
+	- Run inside a Linux VM/container.
+
+If logs or prompts seem missing when using `npx` on Windows, capture full output to a file and inspect it:
+
+Git Bash / WSL:
+```bash
+npx easy-youtube-batch-uploader@beta upload 2>&1 | tee eybu-upload.log
+```
+
+PowerShell:
+```powershell
+npx easy-youtube-batch-uploader@beta upload 2>&1 | Tee-Object -FilePath eybu-upload.log
+```
 
 ## OAuth Notes
 
@@ -59,6 +78,11 @@ What to do:
 - First upload opens browser login and consent screen.
 - Token is cached locally and reused on next uploads.
 - If token is revoked/expired, CLI asks to re-authenticate.
+ 
+OAuth fallback behavior
+- The uploader will try to open a local browser for the OAuth consent screen. If the environment cannot open a browser (headless, remote shell, WSL without GUI), the uploader falls back to a console flow and prints a URL and code in the terminal. Copy that URL into any browser, sign in, paste the code back into the terminal when prompted, and authentication will complete.
+
+If you see "Google OAuth client secrets JSON not found" during `upload`, confirm `GOOGLE_CLIENT_SECRETS` in your config points at the desktop OAuth JSON you downloaded and that the path is expanded (supports `~` and Windows-style backslashes). Use `easy-youtube-batch-uploader doctor` or `npx easy-youtube-batch-uploader@beta doctor` to validate paths.
 
 ## Commands
 

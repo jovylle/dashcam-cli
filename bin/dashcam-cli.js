@@ -9,7 +9,10 @@ const repoRoot = path.resolve(__dirname, "..");
 const scriptsDir = path.join(repoRoot, "scripts");
 const envExamplePath = path.join(repoRoot, ".env.example");
 const appName = "easy-youtube-batch-uploader";
-const defaultConfigDir = path.join(os.homedir(), ".config", appName);
+const defaultConfigDir =
+  process.platform === "win32"
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), appName)
+    : path.join(os.homedir(), ".config", appName);
 const envPath = process.env.EYBU_ENV_FILE
   ? path.resolve(process.env.EYBU_ENV_FILE)
   : path.join(defaultConfigDir, "config.env");
@@ -104,7 +107,7 @@ function normalizeEnvValues(values) {
 function expandPath(value) {
   if (!value) return value;
   return value
-    .replace(/^~(?=$|\/)/, os.homedir())
+    .replace(/^~(?=$|\/|\\)/, os.homedir())
     .replace(/\$HOME/g, os.homedir());
 }
 
@@ -114,16 +117,18 @@ function checkPathExists(label, value, expectedType, required, collector) {
     return;
   }
   const expanded = expandPath(value);
-  const exists = fs.existsSync(expanded);
+  const normalized = path.normalize(expanded);
+  const resolved = path.resolve(normalized);
+  const exists = fs.existsSync(resolved);
   if (!exists) {
-    collector.push(`${label} path does not exist: ${expanded}`);
+    collector.push(`${label} path does not exist: ${resolved}`);
     return;
   }
-  if (expectedType === "dir" && !fs.statSync(expanded).isDirectory()) {
-    collector.push(`${label} is not a directory: ${expanded}`);
+  if (expectedType === "dir" && !fs.statSync(resolved).isDirectory()) {
+    collector.push(`${label} is not a directory: ${resolved}`);
   }
-  if (expectedType === "file" && !fs.statSync(expanded).isFile()) {
-    collector.push(`${label} is not a file: ${expanded}`);
+  if (expectedType === "file" && !fs.statSync(resolved).isFile()) {
+    collector.push(`${label} is not a file: ${resolved}`);
   }
 }
 
@@ -136,6 +141,13 @@ function ensureInitialized({ printSummary = true } = {}) {
   if (!fs.existsSync(envPath)) {
     created = true;
     currentValues = { ...templateValues };
+    // On Windows, prefer storing OAuth files under %APPDATA% to keep them
+    // in a per-user, OS-standard location rather than scattering under $HOME.
+    if (process.platform === "win32") {
+      const appDataDir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "easy-youtube-batch-uploader");
+      currentValues.GOOGLE_CLIENT_SECRETS = path.join(appDataDir, "client_secrets.json");
+      currentValues.GOOGLE_TOKEN_FILE = path.join(appDataDir, "token.json");
+    }
     fs.writeFileSync(
       envPath,
       toEnvContent(normalizeEnvValues(currentValues), envExamplePath),
@@ -193,8 +205,13 @@ function quoteIfNeeded(value) {
   if (value == null) return "";
   const str = String(value);
   if (str === "") return "";
-  if (/\s/.test(str) && !(str.startsWith('"') && str.endsWith('"'))) {
-    return `"${str.replace(/"/g, '\\"')}"`;
+  // If the value contains whitespace or characters that could be interpreted
+  // by a shell when the .env file is sourced, wrap it in single quotes and
+  // safely escape any single quotes inside the value. This preserves
+  // backslashes on Windows paths and avoids accidental shell escapes.
+  if (/\s|\\|\$|`|'/.test(str)) {
+    const escaped = str.replace(/'/g, "'\"'\"'");
+    return `'${escaped}'`;
   }
   return str;
 }
@@ -281,13 +298,67 @@ function runDoctor({ exitOnFinish = true } = {}) {
   const issues = [];
   const warnings = [];
 
+  function tryInstallClientSecretsIfMissing(values) {
+    const current = values.GOOGLE_CLIENT_SECRETS || "";
+    const expandedCurrent = expandPath(current || "");
+    if (expandedCurrent && fs.existsSync(expandedCurrent)) return false;
+
+    const candidates = [];
+    // user-specified but maybe unexpanded
+    if (current) candidates.push(expandPath(current));
+    // cwd
+    candidates.push(path.join(process.cwd(), "client_secrets.json"));
+    // repo root
+    candidates.push(path.join(repoRoot, "client_secrets.json"));
+    // Downloads
+    candidates.push(path.join(os.homedir(), "Downloads", "client_secrets.json"));
+    // common appdata location (Windows)
+    candidates.push(path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), appName, "client_secrets.json"));
+    // location next to env file
+    candidates.push(path.join(path.dirname(envPath), "client_secrets.json"));
+
+    let found = null;
+    for (const c of candidates) {
+      if (!c) continue;
+      try {
+        const p = path.resolve(c);
+        if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+          found = p;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    if (!found) return false;
+
+    // destination
+    const dest = expandPath(values.GOOGLE_CLIENT_SECRETS) || path.join(defaultConfigDir, "client_secrets.json");
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(found, dest);
+
+    // update env file to point to the dest
+    const currentValues = parseEnvFile(envPath);
+    currentValues.GOOGLE_CLIENT_SECRETS = dest;
+    fs.writeFileSync(envPath, toEnvContent(normalizeEnvValues(currentValues), envExamplePath), "utf8");
+    console.log(`Auto-installed Google client secrets from ${found} -> ${dest}`);
+    return true;
+  }
+
   if (!fs.existsSync(envPath)) {
     issues.push(`Missing config file: ${envPath} (run: easy-youtube-batch-uploader setup)`);
   } else {
     checkPathExists("SOURCE", envValues.SOURCE, "dir", true, warnings);
 
-    const hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
-    const hasToken = Boolean(envValues.GOOGLE_TOKEN_FILE);
+    let hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
+    let hasToken = Boolean(envValues.GOOGLE_TOKEN_FILE);
+    if (!hasSecrets) {
+      // Try to auto-install client secrets from common download locations.
+      tryInstallClientSecretsIfMissing(envValues);
+      // re-read envValues after potential change
+      Object.assign(envValues, parseEnvFile(envPath));
+      hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
+    }
     if (!hasSecrets || !hasToken) {
       warnings.push(
         "GOOGLE_CLIENT_SECRETS and GOOGLE_TOKEN_FILE are required for upload command"

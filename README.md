@@ -97,6 +97,24 @@ OAuth fallback behavior
 
 If you see "Google OAuth client secrets JSON not found" during `upload`, confirm `GOOGLE_CLIENT_SECRETS` in your config points at the desktop OAuth JSON you downloaded and that the path is expanded (supports `~` and Windows-style backslashes). Use `easy-youtube-batch-uploader doctor` or `npx easy-youtube-batch-uploader@beta doctor` to validate paths.
 
+### Interactive setup improvements
+
+The `setup` wizard now guides users through installing `client_secrets.json`:
+
+- It prints a direct link to the Google Cloud Console credentials page:
+	https://console.cloud.google.com/apis/credentials
+- You can choose to open that page from the wizard.
+- If you already downloaded the Desktop OAuth JSON, the wizard can copy it into the config dir for you.
+- If you prefer, the wizard accepts pasted JSON directly in the terminal; finish paste by typing a line containing only `EOF` and pressing Enter.
+
+Example: paste flow
+
+1. Run: `easy-youtube-batch-uploader setup`
+2. When asked `Would you like to paste the contents of client_secrets.json now?` answer `y`.
+3. Paste the exact JSON content, then on a new line type `EOF` and Enter.
+
+The wizard will save the file to the canonical config directory and update `GOOGLE_CLIENT_SECRETS` in your config.
+
 ## Commands
 
 ```bash

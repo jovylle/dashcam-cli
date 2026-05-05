@@ -35,7 +35,37 @@ Commands:
   setup-advanced  Interactive wizard for advanced values
   doctor  Validate local setup and config paths
   upload  Run scripts/upload_sdcard_youtube.sh
+  store-secrets  Copy a client_secrets.json into the canonical config folder and update config
 `);
+}
+
+async function storeSecretsCmd(srcPath) {
+  if (!srcPath) {
+    console.error('Usage: easy-youtube-batch-uploader store-secrets <path-to-client_secrets.json>');
+    process.exit(1);
+  }
+  const expanded = expandPath(srcPath);
+  const abs = path.resolve(expanded);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+    console.error(`Source not found: ${abs}`);
+    process.exit(1);
+  }
+
+  fs.mkdirSync(defaultConfigDir, { recursive: true });
+  const dest = path.join(defaultConfigDir, 'client_secrets.json');
+  fs.copyFileSync(abs, dest);
+  try {
+    if (process.platform !== 'win32') {
+      fs.chmodSync(dest, 0o600);
+    }
+  } catch (e) {
+    // ignore permission errors
+  }
+
+  const currentValues = parseEnvFile(envPath);
+  currentValues.GOOGLE_CLIENT_SECRETS = dest;
+  fs.writeFileSync(envPath, toEnvContent(normalizeEnvValues(currentValues), envExamplePath), 'utf8');
+  console.log(`Installed Google client secrets: ${dest}`);
 }
 
 function run(scriptName) {
@@ -269,7 +299,85 @@ async function setupWizard(mode = "core", options = {}) {
       console.log("All required values for this setup mode are already configured.");
     }
 
+    // Helpful interactive flow specifically for Google OAuth client secrets
+    if (activeFields.find(([k]) => k === "GOOGLE_CLIENT_SECRETS")) {
+      const current = merged.GOOGLE_CLIENT_SECRETS ?? "";
+      if (!current) {
+        console.log('\nGoogle OAuth client credentials are required to authorize uploads.');
+        console.log('If you are unfamiliar with the Google Cloud Console, visit:');
+        console.log('  https://console.cloud.google.com/apis/credentials (APIs & Services → Credentials)');
+        console.log('Steps: 1) Create a project 2) Enable YouTube Data API 3) Create OAuth client ID → Desktop app 4) Download JSON');
+
+        const openNow = (await ask('Open Google Cloud Credentials page in your browser now? [y/N]: ')).toLowerCase();
+        if (openNow === 'y' || openNow === 'yes') {
+          try {
+            if (process.platform === 'darwin') {
+              spawnSync('open', ['https://console.cloud.google.com/apis/credentials']);
+            } else if (process.platform === 'win32') {
+              spawnSync('cmd', ['/c', 'start', 'https://console.cloud.google.com/apis/credentials'], { shell: true });
+            } else {
+              spawnSync('xdg-open', ['https://console.cloud.google.com/apis/credentials']);
+            }
+          } catch (e) {
+            // ignore open failures
+          }
+        }
+
+        const haveFile = (await ask('Do you already have client_secrets.json downloaded? [y/N]: ')).toLowerCase();
+        if (haveFile === 'y' || haveFile === 'yes') {
+          const pathInput = await ask('Enter path to client_secrets.json (or leave empty to skip): ');
+          if (pathInput) {
+            const expanded = expandPath(pathInput);
+            const abs = path.resolve(expanded);
+            if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+              fs.mkdirSync(defaultConfigDir, { recursive: true });
+              const dest = path.join(defaultConfigDir, 'client_secrets.json');
+              fs.copyFileSync(abs, dest);
+              try { if (process.platform !== 'win32') fs.chmodSync(dest, 0o600); } catch (e) {}
+              merged.GOOGLE_CLIENT_SECRETS = dest;
+              console.log(`Installed client_secrets.json -> ${dest}`);
+            } else {
+              console.log(`Path not found or not a file: ${abs}`);
+            }
+          }
+        } else {
+          const paste = (await ask('Would you like to paste the contents of client_secrets.json now? (end with a single line containing EOF) [y/N]: ')).toLowerCase();
+          if (paste === 'y' || paste === 'yes') {
+            console.log('Paste the JSON now. Finish by typing a line with only EOF and pressing Enter.');
+            const lines = [];
+            // read until EOF marker
+            while (true) {
+              const line = await ask('');
+              if (line === 'EOF') break;
+              lines.push(line);
+            }
+            const content = lines.join('\n').trim();
+            try {
+              JSON.parse(content);
+              fs.mkdirSync(defaultConfigDir, { recursive: true });
+              const dest = path.join(defaultConfigDir, 'client_secrets.json');
+              fs.writeFileSync(dest, content, 'utf8');
+              try { if (process.platform !== 'win32') fs.chmodSync(dest, 0o600); } catch (e) {}
+              merged.GOOGLE_CLIENT_SECRETS = dest;
+              console.log(`Saved pasted client_secrets.json -> ${dest}`);
+            } catch (e) {
+              console.log('Invalid JSON pasted; skipping client_secrets installation.');
+            }
+          }
+        }
+      }
+    }
+
     for (const [key, label] of activeFields) {
+      // GOOGLE_CLIENT_SECRETS already handled above; show current and allow override
+      if (key === 'GOOGLE_CLIENT_SECRETS') {
+        const current = merged[key] ?? '';
+        const answer = await ask(`${label} [${current}]: `);
+        if (answer !== '') {
+          merged[key] = answer;
+        }
+        continue;
+      }
       const current = merged[key] ?? "";
       const answer = await ask(`${label} [${current}]: `);
       if (answer !== "") {
@@ -352,10 +460,18 @@ function runDoctor({ exitOnFinish = true } = {}) {
 
     let hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
     let hasToken = Boolean(envValues.GOOGLE_TOKEN_FILE);
-    if (!hasSecrets) {
-      // Try to auto-install client secrets from common download locations.
+    // If the configured secrets path is missing, try to auto-install from common locations.
+    if (envValues.GOOGLE_CLIENT_SECRETS) {
+      const expanded = expandPath(envValues.GOOGLE_CLIENT_SECRETS);
+      if (!fs.existsSync(expanded)) {
+        tryInstallClientSecretsIfMissing(envValues);
+        // re-read envValues after potential change
+        Object.assign(envValues, parseEnvFile(envPath));
+        hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
+      }
+    } else {
+      // No configured value — try install
       tryInstallClientSecretsIfMissing(envValues);
-      // re-read envValues after potential change
       Object.assign(envValues, parseEnvFile(envPath));
       hasSecrets = Boolean(envValues.GOOGLE_CLIENT_SECRETS);
     }
@@ -499,6 +615,13 @@ if (command === "help" || command === "--help" || command === "-h") {
   doctor();
 } else if (command === "upload") {
   run("upload_sdcard_youtube.sh");
+} else if (command === "store-secrets") {
+  storeSecretsCmd(process.argv[3])
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(`store-secrets failed: ${err.message}`);
+      process.exit(1);
+    });
 } else {
   console.error(`Unknown command: ${command}`);
   console.error("Run 'easy-youtube-batch-uploader help' to see available commands.");

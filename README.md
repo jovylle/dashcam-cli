@@ -72,6 +72,19 @@ PowerShell:
 npx easy-youtube-batch-uploader@beta upload 2>&1 | Tee-Object -FilePath eybu-upload.log
 ```
 
+## Google API setup
+
+Before running the setup wizard, create your OAuth credentials:
+
+1. Go to the Google Developers Console:  
+   https://console.developers.google.com  
+2. Create or select a project.  
+3. In **APIs & Services** → **Library**, enable **YouTube Data API v3**.  
+4. In **APIs & Services** → **Credentials**, click **Create credentials** → **OAuth client ID**.  
+   - Application type: **Desktop application**  
+5. Download the JSON file and note its path.  
+6. When you run `easy-youtube-batch-uploader setup`, enter that JSON file path for **GOOGLE_CLIENT_SECRETS**.
+
 ## OAuth Notes
 
 - No API key is required for upload flow.

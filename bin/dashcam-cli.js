@@ -238,8 +238,19 @@ async function setupWizard(mode = "core", options = {}) {
     console.log(`\n${isAdvanced ? "Advanced setup wizard" : "Setup wizard"} for ${appName}`);
     console.log(`Config file: ${envPath}`);
     console.log("Press Enter to keep the current/default value.\n");
+    console.log(`
+To upload to YouTube you need OAuth credentials. If you don’t have them yet:
+ 1) Open https://console.developers.google.com
+ 2) Create or select a project
+ 3) Enable “YouTube Data API v3”
+ 4) In “APIs & Services” → “Credentials” → “Create credentials” → “OAuth client ID”
+    • Application type: Desktop
+ 5) Download the JSON file
+ 6) Save it somewhere and enter its path when prompted below
+`);
 
     const coreFields = [
+    
       ["SOURCE", "Folder containing videos to upload"],
       ["YT_TITLE_PREFIX", "YouTube title prefix"],
       ["YT_DESCRIPTION", "YouTube default description"],

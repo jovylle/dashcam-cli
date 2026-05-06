@@ -93,6 +93,13 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 -c "import google.auth, google.oauth2.credentials, google_auth_oauthlib.flow, googleapiclient.discovery" >/dev/null 2>&1; then
+  echo "Missing required Python modules for YouTube upload." >&2
+  echo "Install them with:" >&2
+  echo "  python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests" >&2
+  exit 1
+fi
+
 if [[ ! -f "$GOOGLE_CLIENT_SECRETS" ]]; then
   echo "Google OAuth client secrets JSON not found: $GOOGLE_CLIENT_SECRETS" >&2
   echo "Get it from Google Cloud Console:" >&2

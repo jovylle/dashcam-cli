@@ -154,6 +154,7 @@ Use `setup` for core values and `setup-advanced` for advanced values. You can re
 - OAuth issues: delete token file and run upload again
 - Wrong account/channel: set `YT_TARGET_CHANNEL_ID` as safety lock
 - `SOURCE` not found: update path in config or mount drive first
+- `ModuleNotFoundError: No module named 'google'`: install deps with `python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests`
 
 ## Sample Screenshots
 

@@ -87,6 +87,18 @@ function hasCommand(command) {
   return check.status === 0;
 }
 
+function hasRequiredPythonModules() {
+  const check = spawnSync(
+    "python3",
+    [
+      "-c",
+      "import google.auth, google.oauth2.credentials, google_auth_oauthlib.flow, googleapiclient.discovery",
+    ],
+    { stdio: "pipe" }
+  );
+  return check.status === 0;
+}
+
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -336,9 +348,17 @@ To upload to YouTube you need OAuth credentials. If you don’t have them yet:
     }
 
     // Helpful interactive flow specifically for Google OAuth client secrets
-    if (activeFields.find(([k]) => k === "GOOGLE_CLIENT_SECRETS")) {
+    const shouldOfferOAuthSetup =
+      activeFields.find(([k]) => k === "GOOGLE_CLIENT_SECRETS") ||
+      (!isAdvanced && !oauthOnly);
+    if (shouldOfferOAuthSetup) {
       const current = merged.GOOGLE_CLIENT_SECRETS ?? "";
-      if (!current) {
+      const currentExpanded = expandPath(current || "");
+      const hasExistingSecretsFile =
+        Boolean(currentExpanded) &&
+        fs.existsSync(currentExpanded) &&
+        fs.statSync(currentExpanded).isFile();
+      if (!hasExistingSecretsFile) {
         console.log('\nGoogle OAuth client credentials are required to authorize uploads.');
         console.log('If you are unfamiliar with the Google Cloud Console, visit:');
         console.log('  https://console.cloud.google.com/apis/credentials (APIs & Services → Credentials)');
@@ -539,6 +559,10 @@ function runDoctor({ exitOnFinish = true } = {}) {
 
   if (missingCommands.length > 0) {
     issues.push(`Missing required commands: ${missingCommands.join(", ")}`);
+  } else if (!hasRequiredPythonModules()) {
+    warnings.push(
+      "Missing Python modules for upload (install: python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests)"
+    );
   }
 
   console.log("easy-youtube-batch-uploader doctor");
@@ -599,10 +623,18 @@ async function start() {
     process.exit(doctorResult.status);
   }
 
+  const envAfterDoctor = parseEnvFile(envPath);
+  const expandedSecrets = expandPath(envAfterDoctor.GOOGLE_CLIENT_SECRETS || "");
+  const expandedToken = expandPath(envAfterDoctor.GOOGLE_TOKEN_FILE || "");
   const hasOAuthWarning = doctorResult.warnings.some((warning) =>
-    warning.includes("GOOGLE_CLIENT_SECRETS and GOOGLE_TOKEN_FILE are required for upload command")
+    warning.includes("GOOGLE_CLIENT_SECRETS and GOOGLE_TOKEN_FILE are required for upload command") ||
+    warning.includes("GOOGLE_CLIENT_SECRETS path does not exist")
   );
-  if (hasOAuthWarning) {
+  const oauthIncomplete =
+    !expandedSecrets ||
+    !fs.existsSync(expandedSecrets) ||
+    !expandedToken;
+  if (hasOAuthWarning || oauthIncomplete) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       console.log("OAuth setup is incomplete. Run: easy-youtube-batch-uploader setup-advanced");
       process.exit(0);

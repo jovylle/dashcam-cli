@@ -88,15 +88,8 @@ if [[ ! -d "$SOURCE" ]]; then
   exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 not found." >&2
-  exit 1
-fi
-
-if ! python3 -c "import google.auth, google.oauth2.credentials, google_auth_oauthlib.flow, googleapiclient.discovery" >/dev/null 2>&1; then
-  echo "Missing required Python modules for YouTube upload." >&2
-  echo "Install them with:" >&2
-  echo "  python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node not found." >&2
   exit 1
 fi
 
@@ -125,7 +118,7 @@ check_args=(
 if [[ -n "$YT_PLAYLIST_ID" ]]; then
   check_args+=(--playlist-id "$YT_PLAYLIST_ID")
 fi
-if ! python3 "$SCRIPT_DIR/youtube_api_upload.py" "${check_args[@]}"; then
+if ! node "$SCRIPT_DIR/youtube_api_upload.js" "${check_args[@]}"; then
   echo "Auth/channel pre-check failed. No files were renamed." >&2
   echo "If scopes changed, delete token and retry: rm -f \"$GOOGLE_TOKEN_FILE\"" >&2
   exit 1
@@ -192,7 +185,7 @@ while IFS= read -r file; do
   if [[ -n "$YT_PLAYLIST_ID" ]]; then
     upload_args+=(--playlist-id "$YT_PLAYLIST_ID")
   fi
-  if python3 "$SCRIPT_DIR/youtube_api_upload.py" "${upload_args[@]}"; then
+  if node "$SCRIPT_DIR/youtube_api_upload.js" "${upload_args[@]}"; then
     done_stem="${working_stem%_$READY_TAG}_$DONE_TAG"
     done_base="${done_stem}.${ext}"
     done_path="${dir}/${done_base}"

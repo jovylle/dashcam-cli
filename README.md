@@ -55,9 +55,9 @@ What to do:
  
 Windows notes (npx)
 - Use `npx` to run the beta without installing globally: `npx easy-youtube-batch-uploader@beta start`.
-- The CLI expects a POSIX `bash` shell and `python3` on PATH. On Windows, prefer:
+- The CLI expects a POSIX `bash` shell and `node` on PATH. On Windows, prefer:
 	- WSL2 (recommended) or
-	- Git Bash (from Git for Windows) with `python3` installed, or
+	- Git Bash (from Git for Windows) with Node.js installed, or
 	- Run inside a Linux VM/container.
 
 If logs or prompts seem missing when using `npx` on Windows, capture full output to a file and inspect it:
@@ -154,7 +154,7 @@ Use `setup` for core values and `setup-advanced` for advanced values. You can re
 - OAuth issues: delete token file and run upload again
 - Wrong account/channel: set `YT_TARGET_CHANNEL_ID` as safety lock
 - `SOURCE` not found: update path in config or mount drive first
-- `ModuleNotFoundError: No module named 'google'`: install deps with `python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests`
+- OAuth opens URL but auth fails: regenerate Desktop OAuth credentials and rerun `easy-youtube-batch-uploader setup-advanced`
 
 ## Sample Screenshots
 

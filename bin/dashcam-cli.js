@@ -87,18 +87,6 @@ function hasCommand(command) {
   return check.status === 0;
 }
 
-function hasRequiredPythonModules() {
-  const check = spawnSync(
-    "python3",
-    [
-      "-c",
-      "import google.auth, google.oauth2.credentials, google_auth_oauthlib.flow, googleapiclient.discovery",
-    ],
-    { stdio: "pipe" }
-  );
-  return check.status === 0;
-}
-
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -467,7 +455,7 @@ To upload to YouTube you need OAuth credentials. If you don’t have them yet:
 }
 
 function runDoctor({ exitOnFinish = true } = {}) {
-  const missingCommands = ["bash", "python3"].filter(
+  const missingCommands = ["bash", "node"].filter(
     (command) => !hasCommand(command)
   );
 
@@ -559,10 +547,6 @@ function runDoctor({ exitOnFinish = true } = {}) {
 
   if (missingCommands.length > 0) {
     issues.push(`Missing required commands: ${missingCommands.join(", ")}`);
-  } else if (!hasRequiredPythonModules()) {
-    warnings.push(
-      "Missing Python modules for upload (install: python3 -m pip install --upgrade google-auth google-auth-oauthlib google-api-python-client requests)"
-    );
   }
 
   console.log("easy-youtube-batch-uploader doctor");

@@ -95,7 +95,14 @@ fi
 
 if [[ ! -f "$GOOGLE_CLIENT_SECRETS" ]]; then
   echo "Google OAuth client secrets JSON not found: $GOOGLE_CLIENT_SECRETS" >&2
-  echo "Set GOOGLE_CLIENT_SECRETS in .env after downloading Desktop OAuth JSON." >&2
+  echo "Get it from Google Cloud Console:" >&2
+  echo "  1) Open https://console.cloud.google.com/apis/credentials" >&2
+  echo "  2) Create/select project and enable YouTube Data API v3" >&2
+  echo "  3) Create Credentials -> OAuth client ID -> Desktop app" >&2
+  echo "  4) Download the JSON file" >&2
+  echo "Then configure this CLI with one of:" >&2
+  echo "  - easy-youtube-batch-uploader setup-advanced" >&2
+  echo "  - easy-youtube-batch-uploader store-secrets <path-to-client_secrets.json>" >&2
   exit 1
 fi
 

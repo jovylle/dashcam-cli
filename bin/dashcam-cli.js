@@ -246,12 +246,33 @@ function quoteIfNeeded(value) {
   return str;
 }
 
+function writeDesktopClientSecretsFromValues(clientId, clientSecret) {
+  const payload = {
+    installed: {
+      client_id: clientId,
+      client_secret: clientSecret,
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      redirect_uris: ["http://localhost", "http://127.0.0.1"],
+    },
+  };
+  fs.mkdirSync(defaultConfigDir, { recursive: true });
+  const dest = path.join(defaultConfigDir, "client_secrets.json");
+  fs.writeFileSync(dest, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  try {
+    if (process.platform !== "win32") fs.chmodSync(dest, 0o600);
+  } catch (e) {
+    // ignore permission errors
+  }
+  return dest;
+}
+
 async function setupWizard(mode = "core", options = {}) {
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
   const templateValues = parseEnvFile(envExamplePath);
   const currentValues = fs.existsSync(envPath) ? parseEnvFile(envPath) : {};
   const merged = { ...templateValues, ...currentValues };
-  const { onlyMissing = false } = options;
+  const { onlyMissing = false, oauthOnly = false } = options;
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -298,7 +319,11 @@ To upload to YouTube you need OAuth credentials. If you don’t have them yet:
       ["YT_TARGET_CHANNEL_ID", "Target channel ID (optional safety lock)"],
       ["YT_PLAYLIST_ID", "Playlist ID for auto-add uploads (optional)"],
     ];
-    const fields = isAdvanced ? optionalFields : coreFields;
+    const oauthFields = [
+      ["GOOGLE_CLIENT_SECRETS", "Path to Google OAuth client_secrets JSON"],
+      ["GOOGLE_TOKEN_FILE", "Path to token cache JSON"],
+    ];
+    const fields = oauthOnly ? oauthFields : (isAdvanced ? optionalFields : coreFields);
     const activeFields = onlyMissing
       ? fields.filter(([key]) => {
           const value = (merged[key] ?? "").trim();
@@ -373,6 +398,19 @@ To upload to YouTube you need OAuth credentials. If you don’t have them yet:
               console.log(`Saved pasted client_secrets.json -> ${dest}`);
             } catch (e) {
               console.log('Invalid JSON pasted; skipping client_secrets installation.');
+            }
+          } else {
+            const enterValues = (await ask('Enter client_id and client_secret directly instead? [y/N]: ')).toLowerCase();
+            if (enterValues === 'y' || enterValues === 'yes') {
+              const clientId = await ask('Google OAuth Desktop client_id: ');
+              const clientSecret = await ask('Google OAuth Desktop client_secret: ');
+              if (clientId && clientSecret) {
+                const dest = writeDesktopClientSecretsFromValues(clientId, clientSecret);
+                merged.GOOGLE_CLIENT_SECRETS = dest;
+                console.log(`Generated client_secrets.json -> ${dest}`);
+              } else {
+                console.log('Both client_id and client_secret are required; skipping generation.');
+              }
             }
           }
         }
@@ -523,7 +561,7 @@ function runDoctor({ exitOnFinish = true } = {}) {
   if (exitOnFinish) {
     process.exit(status);
   }
-  return status;
+  return { status, warnings, issues };
 }
 
 function doctor() {
@@ -556,9 +594,28 @@ async function start() {
     await setupWizard("core", { onlyMissing: true });
   }
 
-  const doctorStatus = runDoctor({ exitOnFinish: false });
-  if (doctorStatus !== 0) {
-    process.exit(doctorStatus);
+  const doctorResult = runDoctor({ exitOnFinish: false });
+  if (doctorResult.status !== 0) {
+    process.exit(doctorResult.status);
+  }
+
+  const hasOAuthWarning = doctorResult.warnings.some((warning) =>
+    warning.includes("GOOGLE_CLIENT_SECRETS and GOOGLE_TOKEN_FILE are required for upload command")
+  );
+  if (hasOAuthWarning) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.log("OAuth setup is incomplete. Run: easy-youtube-batch-uploader setup-advanced");
+      process.exit(0);
+    }
+    console.log("\nOAuth setup is incomplete. Let's finish it before upload.\n");
+    console.log("You can also run these commands directly:");
+    console.log("  easy-youtube-batch-uploader setup-advanced");
+    console.log("  easy-youtube-batch-uploader store-secrets <path-to-client_secrets.json>\n");
+    await setupWizard("advanced", { oauthOnly: true });
+    const doctorRetry = runDoctor({ exitOnFinish: false });
+    if (doctorRetry.status !== 0) {
+      process.exit(doctorRetry.status);
+    }
   }
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {

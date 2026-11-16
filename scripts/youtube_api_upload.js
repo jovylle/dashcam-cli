@@ -46,10 +46,22 @@ function parseArgs(argv) {
 function prompt(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      try {
+        rl.close();
+      } catch (e) {
+        // ignore close errors
+      }
+      resolve(value);
+    };
+    // Without a TTY (cron, launchd, piped stdin) readline never answers and the
+    // promise would never settle, so Node exited 0 even though auth failed and
+    // the caller marked the clip DONE. Resolve empty so the exchange fails loudly.
+    rl.on("close", () => finish(""));
+    rl.question(question, (answer) => finish(answer.trim()));
   });
 }
 
@@ -165,13 +177,18 @@ function startOAuthCallbackServer(redirectUri) {
       resolvedUri.port = String(addr.port);
       resolve({
         redirectUri: resolvedUri.toString(),
-        waitForCode: (timeoutMs = 120000) =>
-          Promise.race([
-            codePromise,
-            new Promise((_, rej) =>
-              setTimeout(() => rej(new Error("Timed out waiting for OAuth callback.")), timeoutMs)
-            ),
-          ]),
+        waitForCode: (timeoutMs = 120000) => {
+          let timer;
+          const timeout = new Promise((_, rej) => {
+            timer = setTimeout(
+              () => rej(new Error("Timed out waiting for OAuth callback.")),
+              timeoutMs
+            );
+          });
+          // Clear the timer once the code arrives, otherwise it stays pending and
+          // keeps the process alive for the full timeout after a successful login.
+          return Promise.race([codePromise, timeout]).finally(() => clearTimeout(timer));
+        },
         close: () => {
           if (!settled) {
             settled = true;
@@ -276,6 +293,35 @@ async function getAuthorizedClient(clientSecretsPath, tokenFilePath) {
   return oauth2Client;
 }
 
+const RETRYABLE_PATTERN =
+  /EPIPE|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNABORTED|socket hang up|premature close/i;
+
+function isRetryableError(err) {
+  const msg = (err && (err.message || String(err))) || "";
+  const code = err && err.code ? String(err.code) : "";
+  const status = err && err.response && err.response.status;
+  if (RETRYABLE_PATTERN.test(msg) || RETRYABLE_PATTERN.test(code)) return true;
+  return typeof status === "number" && status >= 500;
+}
+
+async function withRetry(fn, { attempts = 3, baseDelayMs = 2000, label = "Request" } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const msg = (err && (err.message || String(err))) || "";
+      if (!isRetryableError(err) || attempt === attempts) break;
+      const delayMs = baseDelayMs * attempt;
+      console.error(`${label} failed (attempt ${attempt}/${attempts}): ${msg}`);
+      console.error(`Retrying in ${delayMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.clientSecrets) throw new Error("--client-secrets is required");
@@ -306,20 +352,27 @@ async function main() {
   if (!args.title) throw new Error("--title is required unless --check-channel-only is used.");
   if (!fs.existsSync(args.file)) throw new Error(`File not found: ${args.file}`);
 
-  const upload = await youtube.videos.insert({
-    part: ["snippet", "status"],
-    requestBody: {
-      snippet: {
-        title: args.title,
-        description: args.description || "",
-        categoryId: args.categoryId || "2",
-      },
-      status: { privacyStatus: args.privacy },
-    },
-    media: {
-      body: fs.createReadStream(args.file),
-    },
-  });
+  // A dropped upload stream (EPIPE/ECONNRESET) used to lose the whole clip and
+  // leave it staged for a manual re-run. Retry transient failures, building a
+  // fresh read stream per attempt since the previous one is already consumed.
+  const upload = await withRetry(
+    () =>
+      youtube.videos.insert({
+        part: ["snippet", "status"],
+        requestBody: {
+          snippet: {
+            title: args.title,
+            description: args.description || "",
+            categoryId: args.categoryId || "2",
+          },
+          status: { privacyStatus: args.privacy },
+        },
+        media: {
+          body: fs.createReadStream(args.file),
+        },
+      }),
+    { label: `Upload ${path.basename(args.file)}` }
+  );
   const videoId = upload.data.id || "";
   console.log(`Uploaded video id: ${videoId}`);
 
